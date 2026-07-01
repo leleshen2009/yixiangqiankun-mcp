@@ -252,7 +252,68 @@ async function executeDivination(args) {
 }
 
 // ================================================================
-// 创建 MCP Server - 使用 onRequest 方式绕过 setRequestHandler
+// 手动处理 JSON-RPC 请求（不依赖 SDK 的请求处理器）
+// ================================================================
+async function handleRequest(request) {
+    const { method, params, id } = request;
+
+    try {
+        // 处理 tools/list
+        if (method === 'tools/list') {
+            return {
+                jsonrpc: '2.0',
+                id,
+                result: { tools: TOOLS }
+            };
+        }
+
+        // 处理 tools/call
+        if (method === 'tools/call') {
+            const { name, arguments: args } = params;
+            if (name !== 'liuyao_divination') {
+                throw new Error(`未知工具: ${name}`);
+            }
+            const result = await executeDivination(args);
+            return {
+                jsonrpc: '2.0',
+                id,
+                result: result
+            };
+        }
+
+        // 处理 initialize
+        if (method === 'initialize') {
+            return {
+                jsonrpc: '2.0',
+                id,
+                result: {
+                    protocolVersion: '2024-11-05',
+                    capabilities: { tools: { listChanged: false } },
+                    serverInfo: {
+                        name: 'yixiangqiankun-mcp',
+                        version: '1.0.0'
+                    }
+                }
+            };
+        }
+
+        // 其他方法
+        return {
+            jsonrpc: '2.0',
+            id,
+            error: { code: -32601, message: `Method not found: ${method}` }
+        };
+    } catch (error) {
+        return {
+            jsonrpc: '2.0',
+            id,
+            error: { code: -32000, message: error.message }
+        };
+    }
+}
+
+// ================================================================
+// 创建 MCP Server
 // ================================================================
 function createMcpServer() {
     const server = new Server(
@@ -267,29 +328,19 @@ function createMcpServer() {
         }
     );
 
-    // 使用 server.onRequest 替代 setRequestHandler
-    // 这是更底层的方式，兼容所有版本
-    server.onRequest = async (request) => {
-        const { method, params, id } = request;
+    // 使用 server.setRequestHandler 处理 tools/list
+    // 注意：这里使用字符串作为 method 名
+    server.setRequestHandler('tools/list', async () => {
+        return { tools: TOOLS };
+    });
 
-        // 处理 tools/list
-        if (method === 'tools/list') {
-            return { tools: TOOLS };
+    server.setRequestHandler('tools/call', async (request) => {
+        const { name, arguments: args } = request.params;
+        if (name !== 'liuyao_divination') {
+            throw new Error(`未知工具: ${name}`);
         }
-
-        // 处理 tools/call
-        if (method === 'tools/call') {
-            const { name, arguments: args } = params;
-            if (name !== 'liuyao_divination') {
-                throw new Error(`未知工具: ${name}`);
-            }
-            const result = await executeDivination(args);
-            return result;
-        }
-
-        // 其他方法直接返回空
-        return {};
-    };
+        return await executeDivination(args);
+    });
 
     return server;
 }
@@ -343,9 +394,41 @@ async function main() {
         });
 
     } else {
-        const server = createMcpServer();
-        const transport = new StdioServerTransport();
-        await server.connect(transport);
+        // ============ stdio 模式：使用原始 handleRequest ============
+        // 直接处理 stdin/stdout，不依赖 SDK 的 setRequestHandler
+        let buffer = '';
+        
+        process.stdin.on('data', (chunk) => {
+            buffer += chunk.toString();
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                if (!line.trim()) continue;
+                try {
+                    const request = JSON.parse(line);
+                    handleRequest(request).then(response => {
+                        process.stdout.write(JSON.stringify(response) + '\n');
+                    }).catch(err => {
+                        process.stderr.write(`Error: ${err.message}\n`);
+                    });
+                } catch (e) {
+                    process.stderr.write(`Invalid JSON: ${line}\n`);
+                }
+            }
+        });
+
+        process.stdin.on('end', () => {
+            if (buffer.trim()) {
+                try {
+                    const request = JSON.parse(buffer);
+                    handleRequest(request).then(response => {
+                        process.stdout.write(JSON.stringify(response) + '\n');
+                    });
+                } catch (e) {}
+            }
+        });
+
         console.error('Stdio MCP Server running');
     }
 }
