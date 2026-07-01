@@ -1,10 +1,13 @@
 {
   "name": "yixiangqiankun-mcp",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "mcpName": "io.github.leleshen2009/yixiangqiankun-mcp",
   "description": "易象乾坤 · 六爻排盘 MCP 服务（远程调用版）",
   "main": "index.js",
+  "bin": {
+    "yixiangqiankun-mcp": "index.js"
+  },
   "scripts": {
     "start": "node index.js"
   },
