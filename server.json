@@ -1,0 +1,13 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "name": "io.github.leleshen2009/yixiangqiankun-mcp",
+  "description": "排盘 MCP 服务 - 基于火珠林法《增删卜易》体系，为 AI 助手提供专业六爻占卜、排盘解读、运势分析能力",
+  "version": "1.0.0",
+  "packages": [
+    {
+      "registry_type": "npm",
+      "identifier": "yixiangqiankun-mcp",
+      "version": "1.0.0"
+    }
+  ]
+}
